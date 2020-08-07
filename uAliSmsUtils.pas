@@ -53,6 +53,8 @@ type
     procedure RaiseExceptionIfNotSuccess;
   end;
 
+  THttpMethod = (tmPOST, tmGET);
+
   IAliSms = interface
     function Send(PhoneNumbers: TArray<string>; const SignName, TemplateCode,
       TemplateParam: string; const OutId: string = ''): TSendResult; overload;
@@ -73,6 +75,7 @@ type
   end;
 
 function AliSms(const AccessKeyId, AccessKeySecre: string): IAliSms;
+procedure SetDefaultHttpMethod(Value: THttpMethod);
 
 var
   AfterSend: procedure(SendResult: TSendResult; PhoneNumbers: TArray<string>;
@@ -87,16 +90,26 @@ uses
 
 var
   __ErrCodeMsg: TDictionary<string, string>;
+  __HttpMethod: THttpMethod;
 
 const
   ALI_SMS_URL = 'https://dysmsapi.aliyuncs.com/';
 
 type
+  IRequest = interface
+    procedure AddParam(const Name, Value: string);
+    function GetParams: TStrings;
+    function GetQueryStr: string;
+    property Params: TStrings read GetParams;
+  end;
+
   TAliSms = class(TInterfacedObject, IAliSms)
   private
     FAccessKeyId: string;
     FAccessKeySecre: string;
-    {Begin IAliSms}
+    function DoHttp(Request: IRequest): string;
+  private
+    {begin IAliSms}
     function Send(PhoneNumbers: TArray<string>; const SignName, TemplateCode,
       TemplateParam: string; const OutId: string = ''): TSendResult; overload;
     function Send(PhoneNumbers: TArray<string>; const SignName, TemplateCode: string;
@@ -115,16 +128,9 @@ type
     function QuerySendDetails(const PhoneNumber: string; SendDate: TDate;
       CurrentPage: Integer = 1; PageSize: Integer = 50;
       const BizId: string = ''): TQuerySendDetailsResult;
-    {End IAliSms}
+    {end IAliSms}
   public
     constructor Create(const AccessKeyId, AccessKeySecre: string);
-  end;
-
-  IRequest = interface
-    procedure AddParam(const Name, Value: string);
-    function GetParams: TStrings;
-    function GetQueryStr: string;
-    property Params: TStrings read GetParams;
   end;
 
   TRequest = class(TInterfacedObject, IRequest)
@@ -133,16 +139,23 @@ type
     FAccessKeySecre: string;
     FParams: TStringList;
     function GetSign(const StrToSign, AccessKeySecre: string): string;
-    procedure Init(const HTTPMethod: string);
-    {ISignHelper}
+    procedure Init(const HTTPMethod: THttpMethod);
+  private
+    {begin IRequest}
     procedure AddParam(const Name, Value: string); inline;
     function GetQueryStr: string;
     function GetParams: TStrings;
     property Params: TStrings read GetParams;
+    {end IRequest}
   public
     constructor Create(const AccessKeyId, AccessKeySecre: string);
     destructor Destroy; override;
   end;
+
+procedure SetDefaultHttpMethod(Value: THttpMethod);
+begin
+  __HttpMethod := Value;
+end;
 
 function AliSms(const AccessKeyId, AccessKeySecre: string): IAliSms;
 begin
@@ -256,6 +269,21 @@ begin
   FAccessKeySecre := AccessKeySecre;
 end;
 
+function TAliSms.DoHttp(Request: IRequest): string;
+var
+  HTTPClient: THTTPClient;
+begin
+  HTTPClient := THTTPClient.Create;
+  try
+    case __HttpMethod of
+      tmPOST: Result := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
+      tmGET:  Result := HTTPClient.Get(ALI_SMS_URL+'?'+Request.GetQueryStr).ContentAsString(TEncoding.UTF8);
+    end;
+  finally
+    HTTPClient.Free;
+  end;
+end;
+
 function TAliSms.Send(const PhoneNumbers, SignName, TemplateCode: string;
   TemplateParam: TJSONObject; const OutId: string): TSendResult;
 begin
@@ -280,7 +308,6 @@ function TAliSms.Send(PhoneNumbers: TArray<string>; const SignName, TemplateCode
   TemplateParam, OutId: string): TSendResult;
 var
   Request: IRequest;
-  HTTPClient: THTTPClient;
   ContentStr: string;
   jo: TJSONObject;
 begin
@@ -293,11 +320,9 @@ begin
   if not OutId.IsEmpty then
     Request.AddParam('OutId', OutId);
   jo := nil;
-  HTTPClient := THTTPClient.Create;  
   try
-    ContentStr := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);//POST方法
-//    ContentStr := HTTPClient.Get(ALI_SMS_URL+'?'+RequestHelper.GetQueryStr).ContentAsString(TEncoding.UTF8);//GET方法
-    jo := TJSONObject.ParseJSONValue(ContentStr, False, True) as TJSONObject;
+    ContentStr := DoHttp(Request);
+    jo := TJSONObject.ParseJSONValue(ContentStr) as TJSONObject;
     with jo do begin
       if Values['BizId'] <> nil then
         Result := TSendResult.Create(GetValue<string>('BizId'), GetValue<string>('Code'),
@@ -309,7 +334,6 @@ begin
       AfterSend(Result, PhoneNumbers, SignName, TemplateCode,
         TemplateParam, OutId);
   finally
-    HTTPClient.Free;
     jo.Free;
   end;
 end;
@@ -324,7 +348,6 @@ function TAliSms.SendBatch(Items: TArray<TSendBatchItem>;
   const TemplateCode, TemplateParam: string): TSendResult;
 var
   Request: IRequest;
-  HTTPClient: THTTPClient;
   ContentStr: string;
   PhoneNumberJson: TJSONArray;
   SignNameJson: TJSONArray;
@@ -333,7 +356,6 @@ var
 begin
   PhoneNumberJson := TJSONArray.Create;
   SignNameJson := TJSONArray.Create;
-  HTTPClient := THTTPClient.Create;
   jo := nil;
   try
     for Item in Items do begin
@@ -346,8 +368,8 @@ begin
     Request.AddParam('TemplateCode', TemplateCode);
     Request.AddParam('TemplateParamJson', TemplateParam);
     Request.AddParam('Action', 'SendBatchSms');
-    ContentStr := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
-    jo := TJSONObject.ParseJSONValue(ContentStr, False, True) as TJSONObject;
+    ContentStr := DoHttp(Request);
+    jo := TJSONObject.ParseJSONValue(ContentStr) as TJSONObject;
     with jo do begin
       if Values['BizId'] <> nil then
         Result := TSendResult.Create(GetValue<string>('BizId'), GetValue<string>('Code'),
@@ -358,7 +380,6 @@ begin
     if Assigned(AfterSendBatch) then
       AfterSendBatch(Result, Items, TemplateCode, TemplateParam);
   finally
-    HTTPClient.Free;
     jo.Free;
     PhoneNumberJson.Free;
     SignNameJson.Free;
@@ -369,7 +390,6 @@ function TAliSms.QuerySendDetails(const PhoneNumber: string; SendDate: TDate;
   CurrentPage, PageSize: Integer; const BizId: string): TQuerySendDetailsResult;
 var
   Request: IRequest;
-  HTTPClient: THTTPClient;
   ContentStr: string;
   jo: TJSONObject;
   I: Integer;
@@ -384,10 +404,9 @@ begin
   if not BizId.IsEmpty then
     Request.AddParam('BizId', BizId);
   jo := nil;
-  HTTPClient := THTTPClient.Create;
   try
-    ContentStr := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
-    jo := TJSONObject.ParseJSONValue(ContentStr, False, True) as TJSONObject;
+    ContentStr := DoHttp(Request);
+    jo := TJSONObject.ParseJSONValue(ContentStr) as TJSONObject;
     if jo.Values['TotalCount'] <> nil then begin
       Result.Code := jo.GetValue<string>('Code');
       Result.Message := jo.GetValue<string>('Message');
@@ -410,7 +429,6 @@ begin
     else
       raise Exception.Create(ContentStr);
   finally
-    HTTPClient.Free;
     jo.Free;
   end;
 end;
@@ -441,7 +459,7 @@ begin
   FParams.Values[Name] := Value;
 end;
 
-procedure TRequest.Init(const HTTPMethod: string);
+procedure TRequest.Init(const HTTPMethod: THttpMethod);
 var
   Name: string;
   Value: string;
@@ -462,7 +480,11 @@ begin
     SortedQueryStr := SortedQueryStr + '&' + SpecialUrlEncode(Name) + '=' + SpecialUrlEncode(Value);
   end;
   SortedQueryStr := SortedQueryStr.Substring(1);
-  StrToSign := HTTPMethod + '&' + SpecialUrlEncode('/') + '&' + SpecialUrlEncode(SortedQueryStr);
+  case HTTPMethod of
+    tmPOST: StrToSign := 'POST';
+    tmGET:  StrToSign := 'GET';
+  end;
+  StrToSign := StrToSign + '&' + SpecialUrlEncode('/') + '&' + SpecialUrlEncode(SortedQueryStr);
   Signature := GetSign(StrToSign, FAccessKeySecre);
   AddParam('Signature', Signature);
 end;
@@ -478,7 +500,7 @@ end;
 
 function TRequest.GetParams: TStrings;
 begin
-  Init('POST');
+  Init(tmPOST);
   Result := FParams;
 end;
 
@@ -488,7 +510,7 @@ var
   Name: string;
   Value: string;
 begin
-  Init('GET');
+  Init(tmGET);
   Result := '';
   for I := 0 to FParams.Count - 1 do begin
     Name := FParams.Names[I];
@@ -543,6 +565,7 @@ begin
 end;
 
 initialization
+  SetDefaultHttpMethod(tmPOST);
   __ErrCodeMsg := TDictionary<string, string>.Create(TIStringComparer.Ordinal);
   InitErrCodeMsg;
 
