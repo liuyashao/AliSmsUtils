@@ -2,7 +2,7 @@ unit uAliSmsUtils;
 
 {
 阿里云短信单元
-作者:liuyashao
+作者:LYS
 }
 
 interface
@@ -105,6 +105,7 @@ type
 
   TAliSms = class(TInterfacedObject, IAliSms)
   private
+    FHTTPClient: THTTPClient;
     FAccessKeyId: string;
     FAccessKeySecre: string;
     function DoHttp(Request: IRequest): string;
@@ -131,6 +132,7 @@ type
     {end IAliSms}
   public
     constructor Create(const AccessKeyId, AccessKeySecre: string);
+    destructor Destroy; override;
   end;
 
   TRequest = class(TInterfacedObject, IRequest)
@@ -267,20 +269,20 @@ constructor TAliSms.Create(const AccessKeyId, AccessKeySecre: string);
 begin
   FAccessKeyId := AccessKeyId;
   FAccessKeySecre := AccessKeySecre;
+  FHTTPClient := THTTPClient.Create;
+end;
+
+destructor TAliSms.Destroy;
+begin
+  FHTTPClient.Free;
+  inherited;
 end;
 
 function TAliSms.DoHttp(Request: IRequest): string;
-var
-  HTTPClient: THTTPClient;
 begin
-  HTTPClient := THTTPClient.Create;
-  try
-    case __HttpMethod of
-      tmPOST: Result := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
-      tmGET:  Result := HTTPClient.Get(ALI_SMS_URL+'?'+Request.GetQueryStr).ContentAsString(TEncoding.UTF8);
-    end;
-  finally
-    HTTPClient.Free;
+  case __HttpMethod of
+    tmPOST: Result := FHTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
+    tmGET:  Result := FHTTPClient.Get(ALI_SMS_URL+'?'+Request.GetQueryStr).ContentAsString(TEncoding.UTF8);
   end;
 end;
 
@@ -522,6 +524,7 @@ end;
 
 procedure InitErrCodeMsg;
 begin
+  __ErrCodeMsg := TDictionary<string, string>.Create(TIStringComparer.Ordinal);
   with __ErrCodeMsg do begin
     Add('isv.SMS_SIGNATURE_SCENE_ILLEGAL',   '短信所使用签名场景非法');
     Add('isv.EXTEND_CODE_ERROR',             '扩展码使用错误，相同的扩展码不可用于多个签名');
@@ -566,7 +569,6 @@ end;
 
 initialization
   SetDefaultHttpMethod(tmPOST);
-  __ErrCodeMsg := TDictionary<string, string>.Create(TIStringComparer.Ordinal);
   InitErrCodeMsg;
 
 finalization
