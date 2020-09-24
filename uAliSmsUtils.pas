@@ -105,7 +105,6 @@ type
 
   TAliSms = class(TInterfacedObject, IAliSms)
   private
-    FHTTPClient: THTTPClient;
     FAccessKeyId: string;
     FAccessKeySecre: string;
     function DoHttp(Request: IRequest): string;
@@ -132,7 +131,6 @@ type
     {end IAliSms}
   public
     constructor Create(const AccessKeyId, AccessKeySecre: string);
-    destructor Destroy; override;
   end;
 
   TRequest = class(TInterfacedObject, IRequest)
@@ -269,20 +267,20 @@ constructor TAliSms.Create(const AccessKeyId, AccessKeySecre: string);
 begin
   FAccessKeyId := AccessKeyId;
   FAccessKeySecre := AccessKeySecre;
-  FHTTPClient := THTTPClient.Create;
-end;
-
-destructor TAliSms.Destroy;
-begin
-  FHTTPClient.Free;
-  inherited;
 end;
 
 function TAliSms.DoHttp(Request: IRequest): string;
+var
+  HTTPClient: THTTPClient;
 begin
-  case __HttpMethod of
-    tmPOST: Result := FHTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
-    tmGET:  Result := FHTTPClient.Get(ALI_SMS_URL+'?'+Request.GetQueryStr).ContentAsString(TEncoding.UTF8);
+  HTTPClient := THTTPClient.Create;
+  try
+    case __HttpMethod of
+      tmPOST: Result := HTTPClient.Post(ALI_SMS_URL, Request.Params).ContentAsString(TEncoding.UTF8);
+      tmGET:  Result := HTTPClient.Get(ALI_SMS_URL+'?'+Request.GetQueryStr).ContentAsString(TEncoding.UTF8);
+    end;
+  finally
+    HTTPClient.Free;
   end;
 end;
 
