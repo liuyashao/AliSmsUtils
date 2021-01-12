@@ -138,7 +138,7 @@ type
     FAccessKeyId: string;
     FAccessKeySecre: string;
     FParams: TStringList;
-    function GetSign(const StrToSign, AccessKeySecre: string): string;
+    function GetSign(const StrToSign: string): string;
     procedure Init(const HTTPMethod: THttpMethod);
   private
     {begin IRequest}
@@ -466,7 +466,6 @@ var
   I: Integer;
   SortedQueryStr: string;
   StrToSign: string;
-  Signature: string;
 begin
   AddParam('Timestamp', FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now)));
   AddParam('SignatureNonce', GetSignatureNonce);
@@ -485,16 +484,15 @@ begin
     tmGET:  StrToSign := 'GET';
   end;
   StrToSign := StrToSign + '&' + SpecialUrlEncode('/') + '&' + SpecialUrlEncode(SortedQueryStr);
-  Signature := GetSign(StrToSign, FAccessKeySecre);
-  AddParam('Signature', Signature);
+  AddParam('Signature', GetSign(StrToSign));
 end;
 
-function TRequest.GetSign(const StrToSign, AccessKeySecre: string): string;
+function TRequest.GetSign(const StrToSign: string): string;
 var
   Bytes: TBytes;
 begin
   Bytes := THashSHA1.GetHMACAsBytes(TEncoding.UTF8.GetBytes(StrToSign),
-    TEncoding.UTF8.GetBytes(AccessKeySecre+'&'));
+    TEncoding.UTF8.GetBytes(FAccessKeySecre+'&'));
   Result := TNetEncoding.Base64.EncodeBytesToString(Bytes);
 end;
 
