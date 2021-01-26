@@ -415,14 +415,14 @@ begin
       ja := jo.GetValue<TJSONArray>('SmsSendDetailDTOs.SmsSendDetailDTO');
       SetLength(Result.Details, ja.Count);
       for I := 0 to ja.Count - 1 do begin
-        ja.Items[I].TryGetValue<string>('Content', Result.Details[I].Content);
-        ja.Items[I].TryGetValue<string>('ErrCode', Result.Details[I].ErrCode);
-        ja.Items[I].TryGetValue<string>('OutId', Result.Details[I].OutId);
-        ja.Items[I].TryGetValue<string>('PhoneNum', Result.Details[I].PhoneNum);
-        ja.Items[I].TryGetValue<string>('ReceiveDate', Result.Details[I].ReceiveDate);
+        ja.Items[I].TryGetValue<string>('Content',      Result.Details[I].Content);
+        ja.Items[I].TryGetValue<string>('ErrCode',      Result.Details[I].ErrCode);
+        ja.Items[I].TryGetValue<string>('OutId',        Result.Details[I].OutId);
+        ja.Items[I].TryGetValue<string>('PhoneNum',     Result.Details[I].PhoneNum);
+        ja.Items[I].TryGetValue<string>('ReceiveDate',  Result.Details[I].ReceiveDate);
         ja.Items[I].TryGetValue<string>('TemplateCode', Result.Details[I].TemplateCode);
-        ja.Items[I].TryGetValue<string>('SendDate', Result.Details[I].SendDate);
-        ja.Items[I].TryGetValue<string>('SendStatus', Result.Details[I].SendStatus);
+        ja.Items[I].TryGetValue<string>('SendDate',     Result.Details[I].SendDate);
+        ja.Items[I].TryGetValue<string>('SendStatus',   Result.Details[I].SendStatus);
         Result.Details[I].IsSendSuccess := Result.Details[I].SendStatus = '3';
       end;
     end
